@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 #classify_video.py will classify a video using (1) singleFrame RGB model (2) singleFrame flow model (3) 0.5/0.5 singleFrame RGB/singleFrame flow fusion (4) 0.33/0.67 singleFrame RGB/singleFrame flow fusion (5) LRCN RGB model (6) LRCN flow model (7) 0.5/0.5 LRCN RGB/LRCN flow model (8) 0.33/0.67 LRCN RGB/LRCN flow model
 #Before using, change RGB_video_path and flow_video_path.
 #Use: classify_video.py video, where video is the video you wish to classify.  If no video is specified, the video "v_Archery_g01_c01" will be classified.
@@ -11,16 +13,10 @@ import caffe
 caffe.set_mode_gpu()
 caffe.set_device(0)
 import pickle
-
-RGB_video_path = 'frames/'
-flow_video_path = 'flow_images/'
-if len(sys.argv) > 1:
-  video = sys.argv[1]
-else:
-  video = 'v_Archery_g01_c01'
+import os
+import time
 
 #Initialize transformers
-
 def initialize_transformer(image_mean, is_flow):
   shape = (10*16, 3, 227, 227)
   transformer = caffe.io.Transformer({'data': shape})
@@ -33,21 +29,6 @@ def initialize_transformer(image_mean, is_flow):
   transformer.set_transpose('data', (2, 0, 1))
   transformer.set_is_flow('data', is_flow)
   return transformer
-
-
-ucf_mean_RGB = np.zeros((3,1,1))
-ucf_mean_flow = np.zeros((3,1,1))
-ucf_mean_flow[:,:,:] = 128
-ucf_mean_RGB[0,:,:] = 103.939
-ucf_mean_RGB[1,:,:] = 116.779
-ucf_mean_RGB[2,:,:] = 128.68
-
-transformer_RGB = initialize_transformer(ucf_mean_RGB, False)
-transformer_flow = initialize_transformer(ucf_mean_flow,True)
-
-# Extract list of frames in video
-RGB_frames = glob.glob('%s%s/*.jpg' %(RGB_video_path, video))
-flow_frames = glob.glob('%s%s/*.jpg' %(flow_video_path, video))
 
 #classify video with LRCN model
 def LRCN_classify_video(frames, net, transformer, is_flow):
@@ -83,7 +64,7 @@ def LRCN_classify_video(frames, net, transformer, is_flow):
 
 #classify video with singleFrame model
 def singleFrame_classify_video(frames, net, transformer, is_flow):
-  batch_size = 16 
+  batch_size = 16
   input_images = []
   for im in frames:
     input_im = caffe.io.load_image(im)
@@ -108,51 +89,95 @@ def singleFrame_classify_video(frames, net, transformer, is_flow):
     output_predictions[i:i+batch_size] = np.mean(out['probs'].reshape(10,caffe_in.shape[0]/10,101),0)
   return np.mean(output_predictions,0).argmax(), output_predictions
 
-#Models and weights
-singleFrame_model = 'deploy_singleFrame.prototxt'
-lstm_model = 'deploy_lstm.prototxt'
-RGB_singleFrame = 'single_frame_all_layers_hyb_RGB_iter_5000.caffemodel'
-flow_singleFrame = 'single_frame_all_layers_hyb_flow_iter_50000.caffemodel'
-RGB_lstm = 'RGB_lstm_model_iter_30000.caffemodel'
-flow_lstm = 'flow_lstm_model_iter_50000.caffemodel'
-
-RGB_singleFrame_net =  caffe.Net(singleFrame_model, RGB_singleFrame, caffe.TEST)
-class_RGB_singleFrame, predictions_RGB_singleFrame = \
-         singleFrame_classify_video(RGB_frames, RGB_singleFrame_net, transformer_RGB, False)
-del RGB_singleFrame_net
-
-flow_singleFrame_net =  caffe.Net(singleFrame_model, flow_singleFrame, caffe.TEST)
-class_flow_singleFrame, predictions_flow_singleFrame = \
-         singleFrame_classify_video(flow_frames, flow_singleFrame_net, transformer_flow, True)
-del flow_singleFrame_net
-
-RGB_lstm_net =  caffe.Net(lstm_model, RGB_lstm, caffe.TEST)
-class_RGB_LRCN, predictions_RGB_LRCN = \
-         LRCN_classify_video(RGB_frames, RGB_lstm_net, transformer_RGB, False)
-del RGB_lstm_net
-
-flow_lstm_net =  caffe.Net(lstm_model, flow_lstm, caffe.TEST)
-class_flow_LRCN, predictions_flow_LRCN = \
-         LRCN_classify_video(flow_frames, flow_lstm_net, transformer_flow, True)
-del flow_lstm_net
-
 def compute_fusion(RGB_pred, flow_pred, p):
-  return np.argmax(p*np.mean(RGB_pred,0) + (1-p)*np.mean(flow_pred,0))  
+  return np.argmax(p*np.mean(RGB_pred,0) + (1-p)*np.mean(flow_pred,0))
 
-#Load activity label hash
-action_hash = pickle.load(open('action_hash_rev.p','rb'))
+def main():
 
-print "RGB single frame model classified video as: %s.\n" %(action_hash[class_RGB_singleFrame])
-print "Flow single frame model classified video as: %s.\n" %(action_hash[class_flow_singleFrame])
-print "RGB LRCN model classified video as: %s.\n" %(action_hash[class_RGB_LRCN])
-print "Flow LRCN frame model classified video as: %s.\n" %(action_hash[class_flow_LRCN])
-print "0.5/0.5 single frame fusion model classified video as: %s. \n" %(action_hash[compute_fusion(predictions_RGB_singleFrame, predictions_flow_singleFrame, 0.5)])
-print "0.33/0.67 single frame fusion model classified video as: %s. \n" %(action_hash[compute_fusion(predictions_RGB_singleFrame, predictions_flow_singleFrame, 0.33)])
-print "0.5/0.5 LRCN fusion model classified video as: %s. \n" %(action_hash[compute_fusion(predictions_RGB_LRCN, predictions_flow_LRCN, 0.5)])
-print "0.33/0.67 LRCN fusion model classified video as: %s. \n" %(action_hash[compute_fusion(predictions_RGB_LRCN, predictions_flow_LRCN, 0.33)])
+    verbose = True
+    #RGB_video_path = 'frames/'
+    #flow_video_path = 'flow_images/'
+    RGB_video_path = '/media/6TB/Videos/UCF-101'
+    flow_video_path = '/media/6TB/Videos/ucf101_flow_img_tvl1_gpu'
+    if len(sys.argv) > 1:
+      video = sys.argv[1]
+    else:
+      video = 'Archery/v_Archery_g01_c01'
 
+    ucf_mean_RGB = np.zeros((3,1,1))
+    ucf_mean_flow = np.zeros((3,1,1))
+    ucf_mean_flow[:,:,:] = 128
+    ucf_mean_RGB[0,:,:] = 103.939
+    ucf_mean_RGB[1,:,:] = 116.779
+    ucf_mean_RGB[2,:,:] = 128.68
 
+    transformer_RGB = initialize_transformer(ucf_mean_RGB, False)
+    transformer_flow = initialize_transformer(ucf_mean_flow,True)
 
+    # Extract list of frames in video
+    RGB_frames = glob.glob('{}/*.jpg'.format(os.path.join(RGB_video_path, video)))
+    flow_frames = glob.glob('{}/*.jpg'.format(os.path.join(flow_video_path, video)))
 
+    if verbose:
+      print "[debug] RGB_frames={}".format(RGB_frames)
+      print "[debug] flow_frames={}".format(flow_frames)
 
+    if not RGB_frames:
+      print "[fatal] no RGB images found"
+      sys.exit(-1)
 
+    if not flow_frames:
+      print "[fatal] no flow images found"
+      sys.exit(-1)
+
+    #Models and weights
+    singleFrame_model = 'deploy_singleFrame.prototxt'
+    lstm_model = 'deploy_lstm.prototxt'
+    RGB_singleFrame = 'single_frame_all_layers_hyb_RGB_iter_5000.caffemodel'
+    flow_singleFrame = 'single_frame_all_layers_hyb_flow_iter_50000.caffemodel'
+    RGB_lstm = 'RGB_lstm_model_iter_30000.caffemodel'
+    flow_lstm = 'flow_lstm_model_iter_50000.caffemodel'
+
+    RGB_singleFrame_net =  caffe.Net(singleFrame_model, RGB_singleFrame, caffe.TEST)
+    start_time = time.time()
+    class_RGB_singleFrame, predictions_RGB_singleFrame = \
+             singleFrame_classify_video(RGB_frames, RGB_singleFrame_net, transformer_RGB, False)
+    RGB_singleFrame_processing_time = (time.time() - start_time)
+    del RGB_singleFrame_net
+
+    flow_singleFrame_net =  caffe.Net(singleFrame_model, flow_singleFrame, caffe.TEST)
+    start_time = time.time()
+    class_flow_singleFrame, predictions_flow_singleFrame = \
+             singleFrame_classify_video(flow_frames, flow_singleFrame_net, transformer_flow, True)
+    flow_singleFrame_processing_time = (time.time() - start_time)
+    del flow_singleFrame_net
+
+    RGB_lstm_net =  caffe.Net(lstm_model, RGB_lstm, caffe.TEST)
+    start_time = time.time()
+    class_RGB_LRCN, predictions_RGB_LRCN = \
+             LRCN_classify_video(RGB_frames, RGB_lstm_net, transformer_RGB, False)
+    RGB_lstm_processing_time = (time.time() - start_time)
+    del RGB_lstm_net
+
+    flow_lstm_net =  caffe.Net(lstm_model, flow_lstm, caffe.TEST)
+    start_time = time.time()
+    class_flow_LRCN, predictions_flow_LRCN = \
+             LRCN_classify_video(flow_frames, flow_lstm_net, transformer_flow, True)
+    flow_lstm_processing_time = (time.time() - start_time)
+    del flow_lstm_net
+
+    #Load activity label hash
+    action_hash = pickle.load(open('action_hash_rev.p','rb'))
+
+    print "RGB single frame model classified video as:  {} (took {}s).\n".format(action_hash[class_RGB_singleFrame], RGB_singleFrame_processing_time)
+    print "Flow single frame model classified video as: {} (took {}s).\n".format(action_hash[class_flow_singleFrame], flow_singleFrame_processing_time)
+    print "RGB LRCN model classified video as:          {} (took {}s).\n".format(action_hash[class_RGB_LRCN], RGB_lstm_processing_time)
+    print "Flow LRCN frame model classified video as:   {} (took {}s).\n".format(action_hash[class_flow_LRCN], flow_lstm_processing_time)
+
+    print "1:1 single frame fusion model classified video as: %s.\n" %(action_hash[compute_fusion(predictions_RGB_singleFrame, predictions_flow_singleFrame, 0.5)])
+    print "1:2 single frame fusion model classified video as: %s.\n" %(action_hash[compute_fusion(predictions_RGB_singleFrame, predictions_flow_singleFrame, 0.33)])
+    print "1:1 LRCN fusion model classified video as:         %s.\n" %(action_hash[compute_fusion(predictions_RGB_LRCN, predictions_flow_LRCN, 0.5)])
+    print "1:2 LRCN fusion model classified video as:         %s.\n" %(action_hash[compute_fusion(predictions_RGB_LRCN, predictions_flow_LRCN, 0.33)])
+
+if __name__ == '__main__':
+    main()
