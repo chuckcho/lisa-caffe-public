@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+# trivial script, but left for reference
+# remove frame number column and uniq'ify (making a list of unique videos)
+
+cat dextro_benchmark_2016_02_03_train_c3d.txt | awk '{print $1 " " $3}' | uniq > dextro_benchmark_2016_02_03_train.txt
+cat dextro_benchmark_2016_02_03_val_c3d.txt | awk '{print $1 " " $3}' | uniq > dextro_benchmark_2016_02_03_test.txt
