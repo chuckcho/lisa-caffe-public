@@ -29,7 +29,7 @@ flow_frames = '__no_need_to_set__/'
 RGB_frames = ''
 test_frames = 16
 train_frames = 16
-test_buffer = 3
+test_buffer = 2
 train_buffer = 24
 
 def processImageCrop(im_info, transformer, flow):

@@ -1,8 +1,20 @@
 #!/usr/bin/env python
 
-#classify_video.py will classify a video using (1) singleFrame RGB model (2) singleFrame flow model (3) 0.5/0.5 singleFrame RGB/singleFrame flow fusion (4) 0.33/0.67 singleFrame RGB/singleFrame flow fusion (5) LRCN RGB model (6) LRCN flow model (7) 0.5/0.5 LRCN RGB/LRCN flow model (8) 0.33/0.67 LRCN RGB/LRCN flow model
-#Before using, change RGB_video_path and flow_video_path.
-#Use: classify_video.py video, where video is the video you wish to classify.  If no video is specified, the video "v_Archery_g01_c01" will be classified.
+'''
+classify_video.py will classify a video using:
+    (1) singleFrame RGB model
+    (2) singleFrame flow model
+    (3) 0.5/0.5 singleFrame RGB/singleFrame flow fusion
+    (4) 0.33/0.67 singleFrame RGB/singleFrame flow fusion
+    (5) LRCN RGB model
+    (6) LRCN flow model
+    (7) 0.5/0.5 LRCN RGB/LRCN flow model
+    (8) 0.33/0.67 LRCN RGB/LRCN flow model
+
+Before using, change RGB_video_path and flow_video_path.
+Use: classify_video.py video, where video is the video you wish to classify.
+     If no video is specified, the video "v_Archery_g01_c01" will be classified.
+'''
 
 import numpy as np
 import glob
@@ -15,6 +27,9 @@ caffe.set_device(0)
 import pickle
 import os
 import time
+
+# global var
+verbose = True
 
 #Initialize transformers
 def initialize_transformer(image_mean, is_flow):
@@ -32,6 +47,8 @@ def initialize_transformer(image_mean, is_flow):
 
 #classify video with LRCN model
 def LRCN_classify_video(frames, net, transformer, is_flow):
+  if verbose:
+    print "[info] len(frames)={}".format(len(frames))
   clip_length = 16
   offset = 8
   input_images = []
@@ -44,10 +61,16 @@ def LRCN_classify_video(frames, net, transformer, is_flow):
   input_data = []
   for i in range(0,vid_length,offset):
     if (i + clip_length) < vid_length:
+      if verbose:
+          print "[info] input_data += input_images[{}:{}]".format(i,i+clip_length)
       input_data.extend(input_images[i:i+clip_length])
     else:  #video may not be divisible by clip_length
       input_data.extend(input_images[-clip_length:])
   output_predictions = np.zeros((len(input_data),101))
+  if verbose:
+    print "[info] output_predictions.shape={}".format(output_predictions.shape)
+    print "[info] run forward with range(0,len(input_data)={}, clip_length={})".format(
+            len(input_data), clip_length)
   for i in range(0,len(input_data),clip_length):
     clip_input = input_data[i:i+clip_length]
     clip_input = caffe.io.oversample(clip_input,[227,227])
@@ -58,6 +81,9 @@ def LRCN_classify_video(frames, net, transformer, is_flow):
     caffe_in = np.zeros(np.array(clip_input.shape)[[0,3,1,2]], dtype=np.float32)
     for ix, inputs in enumerate(clip_input):
       caffe_in[ix] = transformer.preprocess('data',inputs)
+      print "[info] i={}, ix={}, caffe_in[ix].shape={}".format(i, ix, caffe_in[ix].shape)
+    if verbose:
+      print "[info] caffe_in.shape={}".format(caffe_in.shape)
     out = net.forward_all(data=caffe_in, clip_markers=np.array(clip_clip_markers))
     output_predictions[i:i+clip_length] = np.mean(out['probs'],1)
   return np.mean(output_predictions,0).argmax(), output_predictions
@@ -94,7 +120,6 @@ def compute_fusion(RGB_pred, flow_pred, p):
 
 def main():
 
-    verbose = True
     #RGB_video_path = 'frames/'
     #flow_video_path = 'flow_images/'
     RGB_video_path = '/media/6TB/Videos/UCF-101'
@@ -102,7 +127,7 @@ def main():
     if len(sys.argv) > 1:
       video = sys.argv[1]
     else:
-      video = 'Archery/v_Archery_g01_c01'
+      video = 'Archery/v_Archery_g02_c04'
 
     ucf_mean_RGB = np.zeros((3,1,1))
     ucf_mean_flow = np.zeros((3,1,1))
@@ -138,33 +163,49 @@ def main():
     RGB_lstm = 'RGB_lstm_model_iter_30000.caffemodel'
     flow_lstm = 'flow_lstm_model_iter_50000.caffemodel'
 
-    RGB_singleFrame_net =  caffe.Net(singleFrame_model, RGB_singleFrame, caffe.TEST)
-    start_time = time.time()
-    class_RGB_singleFrame, predictions_RGB_singleFrame = \
-             singleFrame_classify_video(RGB_frames, RGB_singleFrame_net, transformer_RGB, False)
-    RGB_singleFrame_processing_time = (time.time() - start_time)
-    del RGB_singleFrame_net
+    #RGB_singleFrame_net =  caffe.Net(singleFrame_model, RGB_singleFrame, caffe.TEST)
+    #start_time = time.time()
+    #class_RGB_singleFrame, predictions_RGB_singleFrame = \
+    #         singleFrame_classify_video(
+    #                 RGB_frames,
+    #                 RGB_singleFrame_net,
+    #                 transformer_RGB,
+    #                 is_flow=False)
+    #RGB_singleFrame_processing_time = (time.time() - start_time)
+    #del RGB_singleFrame_net
 
-    flow_singleFrame_net =  caffe.Net(singleFrame_model, flow_singleFrame, caffe.TEST)
-    start_time = time.time()
-    class_flow_singleFrame, predictions_flow_singleFrame = \
-             singleFrame_classify_video(flow_frames, flow_singleFrame_net, transformer_flow, True)
-    flow_singleFrame_processing_time = (time.time() - start_time)
-    del flow_singleFrame_net
+    #flow_singleFrame_net =  caffe.Net(singleFrame_model, flow_singleFrame, caffe.TEST)
+    #start_time = time.time()
+    #class_flow_singleFrame, predictions_flow_singleFrame = \
+    #         singleFrame_classify_video(
+    #                 flow_frames,
+    #                 flow_singleFrame_net,
+    #                 transformer_flow,
+    #                 is_flow=True)
+    #flow_singleFrame_processing_time = (time.time() - start_time)
+    #del flow_singleFrame_net
 
     RGB_lstm_net =  caffe.Net(lstm_model, RGB_lstm, caffe.TEST)
     start_time = time.time()
     class_RGB_LRCN, predictions_RGB_LRCN = \
-             LRCN_classify_video(RGB_frames, RGB_lstm_net, transformer_RGB, False)
+             LRCN_classify_video(
+                     RGB_frames,
+                     RGB_lstm_net,
+                     transformer_RGB,
+                     is_flow=False)
     RGB_lstm_processing_time = (time.time() - start_time)
     del RGB_lstm_net
 
-    flow_lstm_net =  caffe.Net(lstm_model, flow_lstm, caffe.TEST)
-    start_time = time.time()
-    class_flow_LRCN, predictions_flow_LRCN = \
-             LRCN_classify_video(flow_frames, flow_lstm_net, transformer_flow, True)
-    flow_lstm_processing_time = (time.time() - start_time)
-    del flow_lstm_net
+    #flow_lstm_net =  caffe.Net(lstm_model, flow_lstm, caffe.TEST)
+    #start_time = time.time()
+    #class_flow_LRCN, predictions_flow_LRCN = \
+    #         LRCN_classify_video(
+    #                 flow_frames,
+    #                 flow_lstm_net,
+    #                 transformer_flow,
+    #                 is_flow=True)
+    #flow_lstm_processing_time = (time.time() - start_time)
+    #del flow_lstm_net
 
     #Load activity label hash
     action_hash = pickle.load(open('action_hash_rev.p','rb'))

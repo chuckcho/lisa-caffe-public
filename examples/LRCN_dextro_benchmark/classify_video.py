@@ -127,12 +127,18 @@ def main():
     print "[fatal] category mapping file does not exist."
 
   # loop over all test videos
-  test_videos = set()
-  with open(test_video_list_file) as f:
-    for line in f:
-      test_videos.add(line.split(' ')[0])
+  #test_videos = set()
+  #with open(test_video_list_file) as f:
+  #  for line in f:
+  #    test_videos.add(line.split(' ')[0])
 
-  outf = open(perf_csv, 'w')
+  # process short video clips first
+  test_videos = sorted(glob.glob('/media/6TB/Videos/dextro-benchmark2/*.mp4'), key=os.path.getsize)
+  test_videos = [video[:-4] for video in test_videos]
+
+  bufsize = 0
+  outf = open(perf_csv, 'w', bufsize)
+
   for video in test_videos:
     # Extract list of frames in video
     #print "[debug] video={}".format(video)
@@ -145,6 +151,8 @@ def main():
       print "[fatal] no RGB images found"
       sys.exit(-1)
 
+    print "-" * 19
+    print "[info] Processing video={}".format(video)
     start_time = time.time()
     class_RGB_LRCN, predictions_RGB_LRCN = \
              LRCN_classify_video(
@@ -153,36 +161,41 @@ def main():
                      transformer_RGB,
                      is_flow=False)
     RGB_lstm_processing_time = (time.time() - start_time)
-    del RGB_lstm_net
 
     avg_pred = np.mean(predictions_RGB_LRCN,0).flatten()
     detected_categories = set(np.where(avg_pred >= detection_threshold)[0])
-    print "[info] LRCN top-1 class={} ({}), detected_categories={} ({}), time={}".format(
-            class_RGB_LRCN,
-            category_hash[class_RGB_LRCN],
-            detected_categories,
-            [str(unicode(category_hash[class_ID])) for class_ID in detected_categories]
-            RGB_lstm_processing_time)
 
     # Get GT class(es)
     groundtruth = get_gt(video)
-    print "[info] Groundtruth for {}: {} ({})".format(
-            video,
+    print "[info] Groundtruth(s): {} ({})".format(
             groundtruth,
             [str(unicode(category_hash[class_ID])) for class_ID in groundtruth]
             )
 
+    # top 5 or class prob >= threshold -- whichever is smaller set
+    top5_categories = set(np.argsort(avg_pred)[-5:][::-1])
+    above_threshold_categories = set(np.where(avg_pred >= detection_threshold)[0])
+    detected_categories = top5_categories & above_threshold_categories
+    print "[info] LRCN top-1 class={} ({}), detected_categories={} ({}), # of detected & gt={}, time={}".format(
+            class_RGB_LRCN,
+            category_hash[class_RGB_LRCN],
+            detected_categories,
+            [str(unicode(category_hash[class_ID])) for class_ID in detected_categories],
+            len(groundtruth & detected_categories),
+            RGB_lstm_processing_time)
+
     # write # of gt labels, # of detected labels, # of gt&detected, bool of top1 being gt, processing time
     top1_hit = class_RGB_LRCN in groundtruth
-    outf.write('{}, {}, {}, {}, {}'.format(
+    outf.write('{}, {}, {}, {}, {}\n'.format(
             len(groundtruth),
             len(detected_categories),
             len(groundtruth & detected_categories),
             top1_hit,
             RGB_lstm_processing_time
-            )
+            ))
 
   outf.close()
+  del RGB_lstm_net
 
 if __name__ == '__main__':
     main()
