@@ -102,7 +102,9 @@ def LRCN_classify_video(frames, net, transformer, is_flow):
 
 def main():
 
-  perf_csv = 'performance.csv'
+  simulate_only = True
+  #perf_csv = 'performance.csv'
+  perf_csv = 'performance_simulate.csv'
 
   mean_RGB = np.zeros((3,1,1))
   mean_RGB[0,:,:] = 103.939
@@ -140,9 +142,16 @@ def main():
   outf = open(perf_csv, 'w', bufsize)
 
   for video in test_videos:
+    # Get GT class(es)
+    groundtruth = get_gt(video)
+    # there can be videos that doesn't have groundtruth
+    if not groundtruth:
+        continue
+
     # Extract list of frames in video
     #print "[debug] video={}".format(video)
     RGB_frames = sorted(glob.glob('{}/*.jpg'.format(video)))
+    video_id = os.path.basename(video)
 
     if verbose:
       print "[debug] RGB_frames={}".format(RGB_frames)
@@ -152,41 +161,47 @@ def main():
       sys.exit(-1)
 
     print "-" * 19
-    print "[info] Processing video={}".format(video)
+    print "[info] Processing video={}".format(video_id)
     start_time = time.time()
-    class_RGB_LRCN, predictions_RGB_LRCN = \
-             LRCN_classify_video(
-                     RGB_frames,
-                     RGB_lstm_net,
-                     transformer_RGB,
-                     is_flow=False)
-    RGB_lstm_processing_time = (time.time() - start_time)
+    if simulate_only:
+        RGB_lstm_processing_time = 0.0
+        class_RGB_LRCN = -1
+        avg_pred = set()
+        detected_categories = set()
+    else:
+        class_RGB_LRCN, predictions_RGB_LRCN = \
+                 LRCN_classify_video(
+                         RGB_frames,
+                         RGB_lstm_net,
+                         transformer_RGB,
+                         is_flow=False)
+        RGB_lstm_processing_time = (time.time() - start_time)
+        avg_pred = np.mean(predictions_RGB_LRCN,0).flatten()
+        detected_categories = set(np.where(avg_pred >= detection_threshold)[0])
 
-    avg_pred = np.mean(predictions_RGB_LRCN,0).flatten()
-    detected_categories = set(np.where(avg_pred >= detection_threshold)[0])
-
-    # Get GT class(es)
-    groundtruth = get_gt(video)
+    # show groundtruth
     print "[info] Groundtruth(s): {} ({})".format(
             groundtruth,
             [str(unicode(category_hash[class_ID])) for class_ID in groundtruth]
             )
 
     # top 5 or class prob >= threshold -- whichever is smaller set
-    top5_categories = set(np.argsort(avg_pred)[-5:][::-1])
-    above_threshold_categories = set(np.where(avg_pred >= detection_threshold)[0])
-    detected_categories = top5_categories & above_threshold_categories
-    print "[info] LRCN top-1 class={} ({}), detected_categories={} ({}), # of detected & gt={}, time={}".format(
-            class_RGB_LRCN,
-            category_hash[class_RGB_LRCN],
-            detected_categories,
-            [str(unicode(category_hash[class_ID])) for class_ID in detected_categories],
-            len(groundtruth & detected_categories),
-            RGB_lstm_processing_time)
+    if not simulate_only:
+        top5_categories = set(np.argsort(avg_pred)[-5:][::-1])
+        above_threshold_categories = set(np.where(avg_pred >= detection_threshold)[0])
+        detected_categories = top5_categories & above_threshold_categories
+        print "[info] LRCN top-1 class={} ({}), detected_categories={} ({}), # of detected & gt={}, time={}".format(
+                class_RGB_LRCN,
+                category_hash[class_RGB_LRCN],
+                detected_categories,
+                [str(unicode(category_hash[class_ID])) for class_ID in detected_categories],
+                len(groundtruth & detected_categories),
+                RGB_lstm_processing_time)
 
     # write # of gt labels, # of detected labels, # of gt&detected, bool of top1 being gt, processing time
     top1_hit = class_RGB_LRCN in groundtruth
-    outf.write('{}, {}, {}, {}, {}\n'.format(
+    outf.write('{}, {}, {}, {}, {}, {}\n'.format(
+            video_id,
             len(groundtruth),
             len(detected_categories),
             len(groundtruth & detected_categories),
