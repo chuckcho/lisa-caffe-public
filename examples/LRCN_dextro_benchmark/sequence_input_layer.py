@@ -23,8 +23,8 @@ import copy
 
 #test_video_list  = 'ucf101_split1_testVideos.txt'
 #train_video_list = 'ucf101_split1_trainVideos.txt'
-test_video_list  = 'dextro_benchmark_2016_02_03_test.txt'
-train_video_list = 'dextro_benchmark_2016_02_03_train.txt'
+test_video_list  = 'dextro_benchmark_2016_03_30_val_lstm.txt'
+train_video_list = 'dextro_benchmark_2016_03_30_train_lstm.txt'
 flow_frames = '__no_need_to_set__/'
 RGB_frames = ''
 test_frames = 16
@@ -155,11 +155,35 @@ class videoRead(caffe.Layer):
     #print "[debug] video_list={}".format(self.video_list)
     for ix, line in enumerate(f_lines):
       #video = line.split(' ')[0].split('/')[1]
-      video = line.split(' ')[0]
-      l = int(line.split(' ')[1])
+
+      # (backward-compatible) 2 space-separated format: <video_dir> <label>
+      # 4 space-separated format: <video_dir> <label> <start frame#> <end frame#>
+      words = line.split(' ')
+      if 2 > len(words):
+          print("[Error] there must be at least two space-separated fields. "
+                "line=\"{}\"".format(line))
+          continue
+
+      video = words[0]
+      l = int(words[1])
+
+      if len(words) == 2:
+          frames = sorted(glob.glob('%s%s/*.jpg' %(self.path_to_images, video)))
+      elif len(words) == 4:
+          start_frame = int(words[2])
+          stop_frame = int(words[3])
+          all_frames = sorted(glob.glob('%s%s/*.jpg' %(self.path_to_images, video)))
+          frames = []
+          for frame in all_frames:
+              frame_num = frame.rsplit('/',1)[-1].rsplit('.')[-2]
+              frame_num = ''.join(c for c in frame_num if c.isdigit())
+              frame_num = int(frame_num)
+              if frame_num >= start_frame and frame_num <= stop_frame:
+                  frames.append(frame)
+          frames = sorted(frames)
+
       #print "[debug] path_to_images={0}, video={1}, globbing {0}{1}/*.jpg".format(self.path_to_images, video)
       #frames = glob.glob('%s%s/*.jpg' %(self.path_to_images, video))
-      frames = sorted(glob.glob('%s%s/*.jpg' %(self.path_to_images, video)))
       num_frames = len(frames)
       video_dict[video] = {}
       #print "frames[0]={}".format(frames[0])

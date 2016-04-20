@@ -11,7 +11,8 @@ max_iter: 30000
 momentum: 0.9
 weight_decay: 0.005
 snapshot: 5000
-snapshot_prefix: "snapshots_dextro_benchmark_lstm"
+#snapshot_prefix: "snapshots_dextro_benchmark_lstm"
+snapshot_prefix: "snapshots_dextro_benchmark_2016_03_30_lstm"
 solver_mode: GPU
 device_id: 0
 random_seed: 1701

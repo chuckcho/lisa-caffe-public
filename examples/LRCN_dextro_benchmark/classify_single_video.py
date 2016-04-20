@@ -96,6 +96,10 @@ def main():
   video = sys.argv[1]
   result_file = sys.argv[2]
 
+  if os.path.isfile(result_file) and os.path.getsize(result_file):
+    print "[Info] Already processed. Skipping..."
+    sys.exit(0)
+
   # default video length: may be overriden by the actual number if a video file
   # is available
   video_length = 0.0
@@ -114,6 +118,7 @@ def main():
     if os.path.isdir(file_no_ext) and glob.glob('{}/*.jpg'.format(file_no_ext)):
       print "[Warning] video dir={} already contains jpg files.".format(
               file_no_ext)
+      video = file_no_ext
     else:
       # extract video into frames
       video_id = os.path.basename(file_no_ext)
