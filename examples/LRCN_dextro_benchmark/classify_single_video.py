@@ -37,6 +37,50 @@ def revmapper(ref_dict, search_value):
       return k
   return None
 
+def merge_timelines(detections):
+  ''' input: detections (list of lists)
+      output: merged detections (list of dicts) '''
+
+  merged_detections = []
+
+  detected_ct_names = set()
+  for det_list in detections:
+    for det in det_list:
+      detected_ct_names.add(det["name"])
+
+  print "[Info] detected_ct_names={}".format(detected_ct_names)
+
+  for ct_name in detected_ct_names:
+    this_ct_name_not_merged_yet = True
+    for det_list in detections:
+      for det in det_list:
+        print "[Debug] ct_name={}, det[\"name\"]={}".format(
+                ct_name,
+                det["name"]
+                )
+        if ct_name == det["name"]:
+          if this_ct_name_not_merged_yet:
+            merged_detection_per_ct = {
+                                  "id": det["id"],
+                                  "instance_occurrences": det["instance_occurrences"],
+                                  "name": ct_name,
+                                  "salience": det["salience"]
+                                }
+            print "[Debug] first time, merged_detection_per_ct={}".format(
+                    merged_detection_per_ct
+                    )
+            this_ct_name_not_merged_yet = False
+          else:
+            merged_detection_per_ct["instance_occurrences"].append(
+                    det["instance_occurrences"])
+            merged_detection_per_ct["salience"] += det["salience"]
+            print "[Debug] merged_detection_per_ct={}".format(
+                    merged_detection_per_ct
+                    )
+    merged_detections.append(merged_detection_per_ct)
+
+  return merged_detections
+
 def get_video_length(video_file):
   ''' get video length using ffmpeg '''
   cmd = [ 'ffprobe',
@@ -355,6 +399,9 @@ def main():
     payload["detections"].append(detections)
 
   del RGB_lstm_net
+
+  # clean up detections
+  payload["detections"] = merge_timelines(payload["detections"])
   payload["length"] = video_length
   payload["original_url"] = "http://dextro.co/duh"
   payload["request_id"] = "hello_world"
