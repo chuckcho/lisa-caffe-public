@@ -280,7 +280,10 @@ layer {
   }
   inner_product_param {
     #num_output: 101
-    num_output: 1170
+    # dextro-benchmark2
+    #num_output: 1170
+    # dextro-benchmark-2016-03-30
+    num_output: 1473
     weight_filler {
       type: "gaussian"
       std: 0.01
